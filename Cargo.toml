@@ -12,6 +12,4 @@ crate-type = ["cdylib"]
 
 [dependencies]
 wasm-bindgen = "0.2.67"
-reqwest = { version = "0.10.7", features = ["json"] }
-select = "0.4.3"
-rayon = { version = "*" }
+url-crawler = "0.3.0"
