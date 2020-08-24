@@ -6,27 +6,16 @@ use select::document::Document;
 use select::predicate::Name;
 use select::predicate::Predicate;
 use std::collections::HashSet;
-use std::io::Error as IoErr;
 use std::path::Path;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures;
 
 #[derive(Debug)]
 enum Error {
-    Write { url: String, e: IoErr },
     Fetch { url: String, e: reqwest::Error },
 }
 
 type Result<T> = std::result::Result<T, Error>;
-
-impl<S: AsRef<str>> From<(S, IoErr)> for Error {
-    fn from((url, e): (S, IoErr)) -> Self {
-        Error::Write {
-            url: url.as_ref().to_string(),
-            e,
-        }
-    }
-}
 
 impl<S: AsRef<str>> From<(S, reqwest::Error)> for Error {
     fn from((url, e): (S, reqwest::Error)) -> Self {
@@ -86,8 +75,6 @@ fn has_extension(url: &&str) -> bool {
 
 #[wasm_bindgen]
 pub async fn crawl(input: &str) -> String {
-    let client = reqwest::Client::new();
-
     let body = fetch_url(input).await.unwrap();
 
     let mut visited = HashSet::new();
@@ -124,5 +111,5 @@ pub async fn crawl(input: &str) -> String {
     println!("{:?}", visited);
     let output: Vec<_> = visited.into_iter().collect();
 
-    return output.join(", ");
+    return output.join(",");
 }
