@@ -1,5 +1,3 @@
-#![feature(async_closure)]
-
 use rayon::prelude::*;
 use reqwest::Url;
 use select::document::Document;
@@ -9,7 +7,7 @@ use std::collections::HashSet;
 use std::io::Error as IoErr;
 use std::path::Path;
 use wasm_bindgen::prelude::*;
-use wasm_bindgen_futures;
+
 
 #[derive(Debug)]
 enum Error {
@@ -38,16 +36,18 @@ impl<S: AsRef<str>> From<(S, reqwest::Error)> for Error {
 }
 
 fn get_links_from_html(html: &str, origin: &str) -> HashSet<String> {
+    
     let normalize_url = |url: &str| -> Option<String> {
         let new_url = Url::parse(url);
         let temp = origin;
 
-        let origin_url = &origin[origin.find("://").unwrap() + 3
-            ..if origin[origin.find("://").unwrap() + 3..].contains("/") {
+        let origin_url = &origin[origin.find("://").unwrap()+3 .. 
+            if origin[origin.find("://").unwrap()+3 ..].contains("/") {
                 origin.find("/").unwrap() - 1
             } else {
-                origin.len()
+                origin.len() 
             }];
+        
         match new_url {
             Ok(new_url) => {
                 if let Some(origin_url) = new_url.host_str() {
@@ -59,13 +59,14 @@ fn get_links_from_html(html: &str, origin: &str) -> HashSet<String> {
             Err(_e) => {
                 // Relative urls are not parsed by Reqwest
                 if url.starts_with('/') {
-                    Some(format!("{}{}", temp, url))
+                    Some(format!("{}{}",temp,url))
                 } else {
                     None
                 }
             }
         }
     };
+    
     return Document::from(html)
         .find(Name("a").or(Name("link")))
         .filter_map(|n| n.attr("href"))
@@ -74,9 +75,11 @@ fn get_links_from_html(html: &str, origin: &str) -> HashSet<String> {
         .collect::<HashSet<String>>();
 }
 
-async fn fetch_url(url: &str) -> Result<String> {
-    let res = reqwest::get(url).await.map_err(|e| (url, e))?;
-    let body = res.text().await.map_err(|e| (url, e))?;
+
+async fn fetch_url(url: &str) -> Result<String, reqwest::Error> {
+    let mut res = reqwest::get(url).await?.map_err(|e| (url, e))?;
+    let mut body = String::new();
+    res.read_to_string(&mut body).map_err(|e| (url, e))?;
     Ok(body)
 }
 
@@ -84,27 +87,28 @@ fn has_extension(url: &&str) -> bool {
     Path::new(&url).extension().is_none()
 }
 
+
 #[wasm_bindgen]
-pub async fn crawl(input: &str) -> String {
+pub fn crawl(input: &str) -> String {
     let client = reqwest::Client::new();
 
-    let body = fetch_url(input).await.unwrap();
+    let body = fetch_url(&client, input).unwrap();
 
     let mut visited = HashSet::new();
     visited.insert(input.to_string());
-    let found_urls = get_links_from_html(&body, input);
+    let found_urls = get_links_from_html(&body,input);
 
     let mut new_urls = found_urls
         .difference(&visited)
         .map(|x| x.to_string())
         .collect::<HashSet<String>>();
-
     while !new_urls.is_empty() {
         let (found_urls, errors): (Vec<Result<HashSet<String>>>, Vec<_>) = new_urls
             .par_iter()
-            .map(async move |url| -> Result<HashSet<String>> {
-                let body = fetch_url(url).await.unwrap();
+            .map(|url| -> Result<HashSet<String>> {
+                let body = fetch_url(&client, url)?;
                 let links = get_links_from_html(&body, input);
+                println!("Visited: {} found {} links", url, links.len());
                 Ok(links)
             })
             .partition(Result::is_ok);
@@ -120,6 +124,14 @@ pub async fn crawl(input: &str) -> String {
             .difference(&visited)
             .map(|x| x.to_string())
             .collect::<HashSet<String>>();
+        println!("New urls: {}", new_urls.len());
+        println!(
+            "Errors: {:#?}",
+            errors
+                .into_iter()
+                .map(Result::unwrap_err)
+                .collect::<Vec<Error>>()
+        )
     }
     println!("{:?}", visited);
     let output: Vec<_> = visited.into_iter().collect();
