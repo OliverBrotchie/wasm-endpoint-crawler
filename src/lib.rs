@@ -1,5 +1,6 @@
 #![feature(async_closure)]
-
+use futures::stream::{self, StreamExt};
+use itertools::Itertools;
 use rayon::prelude::*;
 use reqwest::Url;
 use select::document::Document;
@@ -87,19 +88,21 @@ pub async fn crawl(input: &str) -> String {
         .collect::<HashSet<String>>();
 
     while !new_urls.is_empty() {
-        let (found_urls, errors): (Vec<Result<HashSet<String>>>, Vec<_>) = new_urls
-            .par_iter()
-            .map(async move |url| -> Result<HashSet<String>> {
-                let body = fetch_url(url).await.unwrap();
+        let results: Vec<Result<HashSet<String>>> = stream::iter(new_urls)
+            .then(|url| async move {
+                let body = fetch_url(&url).await.unwrap();
                 let links = get_links_from_html(&body, input);
                 Ok(links)
             })
-            .partition(Result::is_ok);
+            .collect::<Vec<Result<HashSet<String>>>>()
+            .await;
+
+        let (errors, found_urls): (Vec<_>, Vec<_>) = results.into_iter().partition_map(Into::into);
 
         visited.extend(new_urls);
         new_urls = found_urls
             .into_par_iter()
-            .map(Result::unwrap)
+            .map(|r| r.unwrap())
             .reduce(HashSet::new, |mut acc, x| {
                 acc.extend(x);
                 acc
