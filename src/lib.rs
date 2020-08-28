@@ -87,17 +87,19 @@ pub async fn crawl(input: &str) -> String {
         .collect::<HashSet<String>>();
 
     while !new_urls.is_empty() {
-        let results: Vec<Result<HashSet<String>>> = stream::iter(new_urls)
+        //collect the new set of urls
+        let (errors, found_urls): (Vec<_>, Vec<_>) = stream::iter(new_urls)
             .then(|url| async move {
                 let body = fetch_url(&url).await.unwrap();
                 let links = get_links_from_html(&body, input);
                 Ok(links)
             })
             .collect::<Vec<Result<HashSet<String>>>>()
-            .await;
+            .await
+            .into_iter()
+            .partition(|r| r.is_ok());
 
-        let (errors, found_urls): (Vec<_>, Vec<_>) = results.into_iter().partition(|r| r.is_ok());
-
+        //Add the urls found in the last loop to the visited hashset
         visited.extend(new_urls);
         new_urls = found_urls
             .par_iter()
