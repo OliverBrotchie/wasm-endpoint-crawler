@@ -1,6 +1,5 @@
 #![feature(async_closure)]
 use futures::stream::{self, StreamExt};
-use itertools::Itertools;
 use rayon::prelude::*;
 use reqwest::Url;
 use select::document::Document;
@@ -97,12 +96,15 @@ pub async fn crawl(input: &str) -> String {
             .collect::<Vec<Result<HashSet<String>>>>()
             .await;
 
-        let (errors, found_urls): (Vec<_>, Vec<_>) = results.into_iter().partition_map(Into::into);
+        let (errors, found_urls): (Vec<_>, Vec<_>) = results.into_iter().partition(|r| r.is_ok());
 
         visited.extend(new_urls);
         new_urls = found_urls
-            .into_par_iter()
-            .map(|r| r.unwrap())
+            .par_iter()
+            .map(|r| &r.unwrap())
+            //
+            //This is where the error is occuring
+            //
             .reduce(HashSet::new, |mut acc, x| {
                 acc.extend(x);
                 acc
