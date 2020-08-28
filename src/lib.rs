@@ -73,6 +73,7 @@ fn has_extension(url: &&str) -> bool {
     Path::new(&url).extension().is_none()
 }
 
+//finds all subpages of an endpoint
 #[wasm_bindgen]
 pub async fn crawl(input: &str) -> String {
     let body = fetch_url(input).await.unwrap();
@@ -111,6 +112,7 @@ pub async fn crawl(input: &str) -> String {
                 acc.extend(x);
                 acc
             })
+            //find which urls are new and search on them
             .difference(&visited)
             .map(|x| x.to_string())
             .collect::<HashSet<String>>();
