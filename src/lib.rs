@@ -17,11 +17,11 @@ struct Output {
 }
 
 #[derive(Debug)]
-enum Error {
+pub enum Error {
     Fetch { url: String, e: reqwest::Error },
 }
 
-type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = std::result::Result<T, Error>;
 
 impl<S: AsRef<str>> From<(S, reqwest::Error)> for Error {
     fn from((url, e): (S, reqwest::Error)) -> Self {
@@ -32,7 +32,7 @@ impl<S: AsRef<str>> From<(S, reqwest::Error)> for Error {
     }
 }
 
-fn get_links_from_html(html: &str, origin: &str) -> HashSet<String> {
+pub fn get_links_from_html(html: &str, origin: &str) -> HashSet<String> {
     let normalize_url = |url: &str| -> Option<String> {
         let new_url = Url::parse(url);
         let temp = origin;
@@ -70,7 +70,7 @@ fn get_links_from_html(html: &str, origin: &str) -> HashSet<String> {
         .collect::<HashSet<String>>();
 }
 
-async fn fetch_url(url: &str) -> Result<String> {
+pub async fn fetch_url(url: &str) -> Result<String> {
     let client = reqwest::Client::new();
     let res = client
         .get(url)
