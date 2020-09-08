@@ -5,23 +5,23 @@ use reqwest::Url;
 use select::document::Document;
 use select::predicate::Name;
 use select::predicate::Predicate;
-use serde::{Deserialize, Serialize};
+//use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::Path;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures;
 
-#[derive(Serialize, Deserialize, Debug)]
-struct Output {
-    urls: Vec<String>,
-}
+// #[derive(Serialize, Deserialize, Debug)]
+// struct Output {
+//     urls: Vec<String>,
+// }
 
 #[derive(Debug)]
-pub enum Error {
+enum Error {
     Fetch { url: String, e: reqwest::Error },
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
+type Result<T> = std::result::Result<T, Error>;
 
 impl<S: AsRef<str>> From<(S, reqwest::Error)> for Error {
     fn from((url, e): (S, reqwest::Error)) -> Self {
@@ -32,17 +32,9 @@ impl<S: AsRef<str>> From<(S, reqwest::Error)> for Error {
     }
 }
 
-pub fn get_links_from_html(html: &str, origin: &str) -> HashSet<String> {
+fn get_links_from_html(html: &str, origin: &str) -> HashSet<String> {
     let normalize_url = |url: &str| -> Option<String> {
         let new_url = Url::parse(url);
-        let temp = origin;
-
-        // let origin_url = &origin[origin.find("://").unwrap() + 3
-        //     ..if origin[origin.find("://").unwrap() + 3..].contains("/") {
-        //         origin.find("/").unwrap() - 1
-        //     } else {
-        //         origin.len()
-        //     }];
 
         match new_url {
             Ok(new_url) => {
@@ -55,7 +47,7 @@ pub fn get_links_from_html(html: &str, origin: &str) -> HashSet<String> {
             Err(_e) => {
                 // Relative urls are not parsed by Reqwest
                 if url.starts_with('/') {
-                    Some(format!("{}{}", temp, url))
+                    Some(format!("{}{}", origin, url))
                 } else {
                     None
                 }
@@ -70,7 +62,7 @@ pub fn get_links_from_html(html: &str, origin: &str) -> HashSet<String> {
         .collect::<HashSet<String>>();
 }
 
-pub async fn fetch_url(url: &str) -> Result<String> {
+async fn fetch_url(url: &str) -> Result<String> {
     let client = reqwest::Client::new();
     let res = client
         .get(url)
@@ -86,8 +78,7 @@ fn has_extension(url: &&str) -> bool {
     Path::new(&url).extension().is_none()
 }
 
-#[wasm_bindgen] //error occuring here
-pub async fn crawl(input: String) -> JsValue {
+async fn scrape_links(input: String) -> Vec<String> {
     let input = input.as_str();
     let body = fetch_url(input).await;
 
@@ -125,14 +116,27 @@ pub async fn crawl(input: String) -> JsValue {
                 .map(|x| x.to_string())
                 .collect::<HashSet<String>>();
         }
-        let urls: Vec<_> = visited.into_iter().collect();
-        let output = Output { urls };
-
-        JsValue::from_serde(&output).unwrap()
+        visited.into_iter().collect::<Vec<String>>()
     } else {
-        let urls: Vec<String> = vec!["Err".to_string()];
-        let output = Output { urls };
-
-        JsValue::from_serde(&output).unwrap()
+        vec!["Err".to_string()]
     }
+}
+
+
+#[wasm_bindgen]
+pub async fn crawl(input: String) -> JsValue {
+    JsValue::from_serde(&scrape_links(input).await).unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn run_scrape() {
+        let result: Vec<String> = scrape_links("https://rolisz.ro/".to_string()).await;
+
+        assert!(result != vec!["Err".to_string()] && result.len() >= 1);
+    }
+
 }
