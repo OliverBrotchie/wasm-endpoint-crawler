@@ -1,20 +1,12 @@
 #![feature(async_closure)]
 use futures::stream::{self, StreamExt};
-use rayon::prelude::*;
 use reqwest::Url;
 use select::document::Document;
 use select::predicate::Name;
 use select::predicate::Predicate;
-//use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::Path;
 use wasm_bindgen::prelude::*;
-use wasm_bindgen_futures;
-
-// #[derive(Serialize, Deserialize, Debug)]
-// struct Output {
-//     urls: Vec<String>,
-// }
 
 #[derive(Debug)]
 enum Error {
@@ -32,7 +24,7 @@ impl<S: AsRef<str>> From<(S, reqwest::Error)> for Error {
     }
 }
 
-fn get_links_from_html(html: &str, origin: &str) -> HashSet<String> {
+pub fn get_links_from_html(html: &str, origin: &str) -> HashSet<String> {
     let normalize_url = |url: &str| -> Option<String> {
         let new_url = Url::parse(url);
 
@@ -54,20 +46,16 @@ fn get_links_from_html(html: &str, origin: &str) -> HashSet<String> {
             }
         }
     };
-    return Document::from(html)
+    Document::from(html)
         .find(Name("a").or(Name("link")))
         .filter_map(|n| n.attr("href"))
         .filter(has_extension)
         .filter_map(normalize_url)
-        .collect::<HashSet<String>>();
+        .collect::<HashSet<String>>()
 }
 
 async fn fetch_url(url: &str) -> Result<String> {
-    let client = reqwest::Client::new();
-    let res = client
-        .get(url)
-        .fetch_mode_no_cors()
-        .send()
+    let res = reqwest::get(format!("https://cors-anywhere.herokuapp.com/{}", url).as_str())
         .await
         .map_err(|e| (url, e))?;
     let body = res.text().await.map_err(|e| (url, e))?;
@@ -78,7 +66,7 @@ fn has_extension(url: &&str) -> bool {
     Path::new(&url).extension().is_none()
 }
 
-async fn scrape_links(input: String) -> Vec<String> {
+pub async fn scrape_links(input: String) -> Vec<String> {
     let input = input.as_str();
     let body = fetch_url(input).await;
 
@@ -106,12 +94,10 @@ async fn scrape_links(input: String) -> Vec<String> {
 
             visited.extend(new_urls);
             new_urls = found_urls
-                .into_par_iter()
+                .into_iter()
                 .map(|r| r.unwrap())
-                .reduce(HashSet::new, |mut acc, x| {
-                    acc.extend(x);
-                    acc
-                })
+                .flatten()
+                .collect::<HashSet<String>>()
                 .difference(&visited)
                 .map(|x| x.to_string())
                 .collect::<HashSet<String>>();
@@ -121,7 +107,6 @@ async fn scrape_links(input: String) -> Vec<String> {
         vec!["Err".to_string()]
     }
 }
-
 
 #[wasm_bindgen]
 pub async fn crawl(input: String) -> JsValue {
@@ -138,5 +123,4 @@ mod tests {
 
         assert!(result != vec!["Err".to_string()] && result.len() >= 1);
     }
-
 }
